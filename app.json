@@ -1,0 +1,66 @@
+{
+  "expo": {
+    "name": "aria",
+    "slug": "aria",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "aria",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Aria listens to your daily voice check-in to learn how you feel over time. Audio stays on your device.",
+        "NSCameraUsageDescription": "Aria reads your medical documents and pill bottles to extract information. Photos stay on your device.",
+        "NSPhotoLibraryUsageDescription": "Aria can read existing photos of your medical documents from your library. Photos stay on your device."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["RECORD_AUDIO", "CAMERA", "READ_MEDIA_IMAGES"]
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Aria listens to your daily voice check-in to learn how you feel over time. Audio stays on your device."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Aria can read existing photos of your medical documents from your library. Photos stay on your device.",
+          "cameraPermission": "Aria reads your medical documents and pill bottles to extract information. Photos stay on your device."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff",
+          "dark": {
+            "backgroundColor": "#000000"
+          }
+        }
+      ]
+    ],
+    "experiments": {
+      "reactCompiler": true
+    }
+  }
+}
