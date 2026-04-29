@@ -9,7 +9,12 @@
 //   GEMINI_MODEL                          → the active model id ('gemini-3-pro-preview')
 import * as FileSystem from 'expo-file-system/legacy';
 
-export const GEMINI_MODEL = 'gemini-3-pro-preview';
+// Free-tier compatible. gemini-3-pro-preview routes to gemini-3.1-pro internally
+// which has limit:0 on the free tier. gemini-2.5-pro is capped at 5 RPM / 25 per
+// day. gemini-2.5-flash gets 10 RPM / 250 per day, supports vision + audio +
+// JSON mode, and is fast enough that the processing rituals feel snappy.
+// Switch to gemini-2.5-pro if you upgrade to a paid tier and want max quality.
+export const GEMINI_MODEL = 'gemini-2.5-flash';
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 const SYSTEM_PROMPT = `You are Aria's document extraction module. You receive a photograph of a medical document — could be a lab report, a prescription, a discharge summary, an imaging report, or something else. Your job is to extract its contents into a precise structured JSON.
