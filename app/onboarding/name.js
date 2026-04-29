@@ -74,7 +74,7 @@ export default function NameScreen({ active = false, name, setName, onContinue }
                 onChangeText={setName}
                 onFocus={() => setFocused(true)}
                 onBlur={() => setFocused(false)}
-                placeholder="your name"
+                placeholder="Your Name"
                 placeholderTextColor={theme.colors.text.dim}
                 selectionColor={theme.colors.amber.primary}
                 cursorColor={theme.colors.amber.primary}
@@ -142,7 +142,7 @@ const styles = StyleSheet.create({
   },
   input: {
     fontFamily: theme.fonts.body,
-    fontSize: theme.fontSize.xl,
+    fontSize: theme.fontSize.lg,
     color: theme.colors.text.primary,
     textAlign: 'center',
     paddingVertical: theme.spacing.md,

@@ -378,14 +378,15 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.text.dim,
   },
   // ── Hero ───────────────────────────────────────────
-  // No flex:1 here — the hero takes its natural size so the gap between
-  // voice text and the quick row stays controlled. Margins between sibling
-  // sections govern the rhythm explicitly.
+  // flex:1 lets the hero absorb leftover vertical space so the ring sits
+  // mid-screen and the action cluster (quick → meal → pulse) anchors near
+  // the bottom in one continuous rhythm — instead of all the controls
+  // bunching at the top with a void above the mic.
   hero: {
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: 'center',
     gap: theme.spacing.md,
-    marginTop: theme.spacing.md,
+    flex: 1,
   },
   // Ring + caption render as a tight block; caption clears the ring's
   // bottom dot (which lives 14pt outside the SVG circle).
@@ -421,7 +422,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginTop: theme.spacing.lg,
+    marginTop: theme.spacing.md,
   },
   quickItem: { alignItems: 'center', gap: 6, flex: 1 },
   quickCircle: {
@@ -442,7 +443,7 @@ const styles = StyleSheet.create({
   },
   // ── Meal row ───────────────────────────────────────
   mealRow: {
-    marginTop: theme.spacing.sm,
+    marginTop: theme.spacing.md,
     alignItems: 'center',
   },
   logMealBtn: {
@@ -497,14 +498,12 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background.secondary,
   },
   // ── Footer ─────────────────────────────────────────
-  // marginTop: 'auto' anchors the pulse near the bottom of the available
-  // space without forcing big gaps elsewhere — content above flows naturally
-  // and the footer floats above the tab bar.
+  // Fixed margin (not 'auto') so the pulse stays close to the meal pill —
+  // hero's flex:1 already absorbs the spare space above.
   footer: {
     alignItems: 'center',
     gap: theme.spacing.sm,
-    marginTop: 'auto',
-    paddingTop: theme.spacing.lg,
+    marginTop: theme.spacing.lg,
   },
   footerLabel: { color: theme.colors.text.dim },
 });
