@@ -147,6 +147,7 @@ export default function CheckInScreen() {
       // 1) Permissions
       const perm = await Audio.requestPermissionsAsync();
       if (perm.status !== 'granted') {
+        haptics.warning();
         setPhase('permission_denied');
         return;
       }
@@ -279,11 +280,15 @@ export default function CheckInScreen() {
         if (remaining > 0) await new Promise((r) => setTimeout(r, remaining));
 
         clearTimeout(t1); clearTimeout(t2);
+        // Notification-style success haptic when the analysis lands —
+        // distinct from impact taps so the user feels "done".
+        haptics.success();
         setResult(checkInData);
         setPhase('complete');
       } catch (err) {
         console.warn('[checkin] pipeline failed', err);
         clearTimeout(t1); clearTimeout(t2);
+        haptics.error();
         setErrorMsg('Something went wrong on my end. Try again in a moment.');
         setPhase('error');
       }

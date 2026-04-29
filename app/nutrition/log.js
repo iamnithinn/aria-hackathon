@@ -169,6 +169,7 @@ export default function NutritionLog() {
       const remaining = minDoneAt - Date.now();
       if (remaining > 0) await new Promise((r) => setTimeout(r, remaining));
 
+      haptics.success();
       setParsed({
         transcript,
         items,
@@ -178,6 +179,7 @@ export default function NutritionLog() {
       setPhase('confirmation');
     } catch (err) {
       console.warn('[nutrition/log] pipeline failed', err);
+      haptics.error();
       setErrorMsg('Something didn\'t parse cleanly. Try again?');
       setPhase('error');
     }
@@ -192,13 +194,14 @@ export default function NutritionLog() {
 
   const save = useCallback(async () => {
     if (!parsed) return;
-    haptics.confirm();
     await addMeal({
       transcript: parsed.transcript,
       items: parsed.items,
       totals: parsed.totals,
       ariaContext: parsed.ariaContext,
     });
+    // Success notification ripple — feels like the meal was "filed away".
+    haptics.success();
     router.replace('/nutrition');
   }, [parsed, router]);
 

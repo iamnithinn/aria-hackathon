@@ -1,5 +1,7 @@
-// components/SerifText.js — Fraunces italic display text.
-// Used for all emotional/headline copy. Defaults to italic — that's the voice.
+// components/SerifText.js — display/headline text.
+// Now uses Plus Jakarta Sans (friendly upright sans). The `italic` prop is
+// kept for back-compat but does not actually italicize anymore — the font
+// family resolves to non-italic variants.
 import React from 'react';
 import { Text, StyleSheet } from 'react-native';
 
@@ -43,7 +45,7 @@ export default function SerifText({
 
 const styles = StyleSheet.create({
   base: {
-    // Letter-spacing is intentionally 0 — Fraunces is hinted to look right untouched.
+    // Letter-spacing is intentionally 0 — Plus Jakarta Sans is hinted to look right untouched.
     letterSpacing: 0,
   },
 });

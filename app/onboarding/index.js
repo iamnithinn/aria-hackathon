@@ -1,12 +1,13 @@
 // app/onboarding/index.js — the swipeable onboarding pager.
 //
 // Holds the horizontal page state (0..4), wires the gesture, renders the 5
-// screen components stacked in a row, the bottom dot indicator, and the very
-// subtle background gradient that shifts hue between pages.
+// screen components stacked in a row, the bottom dot indicator, the tinted
+// background gradient that shifts hue between pages, and ambient floating
+// orbs that drift to give the screen life.
 //
 // Each screen lives in its own file (./welcome, ./promise, etc.). The pager
 // passes them whatever they need to talk back (advance, name state, etc.).
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Dimensions, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -14,9 +15,16 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   useAnimatedProps,
+  useDerivedValue,
   withTiming,
+  withRepeat,
+  withSequence,
+  withSpring,
+  interpolate,
   interpolateColor,
+  Extrapolation,
   runOnJS,
+  Easing,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 
@@ -30,24 +38,34 @@ import PrivacyScreen from './privacy';
 import NameScreen from './name';
 import ReadyScreen from './ready';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const PAGES = 5;
 
-// Gradient colors used per page — VERY subtle hue shift, almost imperceptible.
-// All tones sit in the deep-charcoal/warm-charcoal family.
+// Page transition tuning — calmer than before. Higher commit threshold means
+// the user has to actually commit to a swipe; activation offset is wider so
+// vertical scrolls / accidental drags don't grab the gesture.
+const ACTIVE_OFFSET = 24;
+const FAIL_VERTICAL = 20;
+const COMMIT_THRESHOLD = 0.42;
+const VELOCITY_FACTOR = 0.10;
+const SNAP_DURATION = 520;
+
+// Page-specific gradient stops. Cherry-on-cherry — barely-there hue shifts
+// that drift from deep cherry on the first page toward the brand-bright
+// #A4303F on the final ready screen.
 const GRADIENT_TOPS = [
-  '#0E0E10', // 0 welcome — neutral
-  '#11100F', // 1 promise — barely warmer
-  '#0E1011', // 2 privacy — barely cooler
-  '#12100E', // 3 name — slight amber tint
-  '#13100D', // 4 ready — most amber-leaning
+  '#7E2230', // 0 welcome — deep cherry
+  '#882633', // 1 promise — slightly brighter
+  '#922A38', // 2 privacy — closer to brand
+  '#9C2E3D', // 3 name — almost at brand
+  '#A4303F', // 4 ready — brand cherry rose
 ];
 const GRADIENT_BOTTOMS = [
-  '#0B0B0D',
-  '#0D0C0B',
-  '#0B0D0E',
-  '#0E0C0A',
-  '#0F0C09',
+  '#641A26',
+  '#6B1C28',
+  '#741F2C',
+  '#7B222F',
+  '#822533',
 ];
 
 const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
@@ -55,19 +73,16 @@ const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
 export default function OnboardingPager() {
   const router = useRouter();
 
-  // Page state. `pageIndex` is the JS-side committed page; `progress` is the
-  // continuous shared value used for animations (gestures + snaps).
   const [pageIndex, setPageIndex] = useState(0);
   const [name, setName] = useState('');
 
   const progress = useSharedValue(0); // 0..(PAGES-1) — drives all motion
   const dragX = useSharedValue(0);    // current pan delta in pages
 
-  // JS-side wrapper for use by buttons/inputs (not in worklets).
   const advance = useCallback(() => {
     const next = Math.min(PAGES - 1, pageIndex + 1);
     progress.value = withTiming(next, {
-      duration: 480,
+      duration: SNAP_DURATION,
       easing: theme.motion.easing.standard,
     });
     setPageIndex(next);
@@ -75,66 +90,73 @@ export default function OnboardingPager() {
   }, [pageIndex, progress]);
 
   const finish = useCallback(async () => {
-    haptics.confirm();
-    // Persist before we navigate so the next launch skips onboarding.
+    haptics.success();
     try {
       await initMemory((name || '').trim() || 'friend');
     } catch (err) {
       console.warn('[onboarding] failed to persist name', err);
     }
-    // Replace so back-swipe doesn't return to onboarding.
     router.replace('/(tabs)');
   }, [router, name]);
 
   // ── Gesture: horizontal pan to swipe between pages ─────────
   const pan = Gesture.Pan()
-    .activeOffsetX([-10, 10])
-    .failOffsetY([-12, 12])
+    .activeOffsetX([-ACTIVE_OFFSET, ACTIVE_OFFSET])
+    .failOffsetY([-FAIL_VERTICAL, FAIL_VERTICAL])
+    .onBegin(() => {
+      runOnJS(haptics.soft)();
+    })
     .onUpdate((e) => {
-      // Drag in pages units (e.translationX in px → pages).
-      dragX.value = -e.translationX / SCREEN_WIDTH;
+      // Resistance at the edges — swiping past page 0 / last drags less.
+      let pages = -e.translationX / SCREEN_WIDTH;
+      const projected = pageIndex + pages;
+      if (projected < 0) pages = -pageIndex + (projected) * 0.35;
+      else if (projected > PAGES - 1) pages = (PAGES - 1 - pageIndex) + (projected - (PAGES - 1)) * 0.35;
+      dragX.value = pages;
     })
     .onEnd((e) => {
       const velocityPages = -e.velocityX / SCREEN_WIDTH;
-      const projected = pageIndex + dragX.value + velocityPages * 0.15;
-      // Round to the nearest page, but require some commitment to flip.
+      const projected = pageIndex + dragX.value + velocityPages * VELOCITY_FACTOR;
+
       let target = pageIndex;
-      if (projected > pageIndex + 0.25) target = pageIndex + 1;
-      else if (projected < pageIndex - 0.25) target = pageIndex - 1;
+      if (projected > pageIndex + COMMIT_THRESHOLD) target = pageIndex + 1;
+      else if (projected < pageIndex - COMMIT_THRESHOLD) target = pageIndex - 1;
       target = Math.max(0, Math.min(PAGES - 1, target));
 
       dragX.value = withTiming(0, {
-        duration: 360,
+        duration: SNAP_DURATION,
         easing: theme.motion.easing.standard,
       });
-      progress.value = withTiming(target, {
-        duration: 480,
-        easing: theme.motion.easing.standard,
+      progress.value = withSpring(target, {
+        damping: 22,
+        stiffness: 160,
+        mass: 0.9,
       });
       if (target !== pageIndex) {
         runOnJS(setPageIndex)(target);
-        runOnJS(haptics.tap)();
+        runOnJS(haptics.commit)();
       }
     });
 
-  // ── Animated styles ────────────────────────────────────────
+  // Continuous "live" page position used for parallax and per-page transforms.
+  const livePos = useDerivedValue(() => progress.value + dragX.value);
+
   const rowStyle = useAnimatedStyle(() => {
-    const px = -(progress.value + dragX.value) * SCREEN_WIDTH;
+    const px = -livePos.value * SCREEN_WIDTH;
     return { transform: [{ translateX: px }] };
   });
 
-  // Interpolate colors over the page progress for a barely-there hue shift.
-  // `colors` is a prop, not a style — so we use useAnimatedProps.
+  // Background gradient hue shifts with progress.
   const gradientProps = useAnimatedProps(() => {
     const inputs = [0, 1, 2, 3, 4];
-    const top = interpolateColor(progress.value, inputs, GRADIENT_TOPS);
-    const bottom = interpolateColor(progress.value, inputs, GRADIENT_BOTTOMS);
+    const top = interpolateColor(livePos.value, inputs, GRADIENT_TOPS);
+    const bottom = interpolateColor(livePos.value, inputs, GRADIENT_BOTTOMS);
     return { colors: [top, bottom] };
   });
 
   return (
     <View style={styles.root}>
-      {/* Subtle full-screen gradient that shifts between pages */}
+      {/* Animated gradient backdrop */}
       <AnimatedLinearGradient
         animatedProps={gradientProps}
         colors={[GRADIENT_TOPS[0], GRADIENT_BOTTOMS[0]]}
@@ -143,44 +165,156 @@ export default function OnboardingPager() {
         style={StyleSheet.absoluteFill}
       />
 
+      {/* Ambient floating orbs — drift slowly behind the content for life */}
+      <AmbientOrbs livePos={livePos} />
+
       <GestureDetector gesture={pan}>
         <Animated.View style={[styles.row, rowStyle, { width: SCREEN_WIDTH * PAGES }]}>
-          <View style={[styles.page, { width: SCREEN_WIDTH }]}>
+          <PageWrap index={0} livePos={livePos}>
             <WelcomeScreen active={pageIndex === 0} onAdvance={advance} />
-          </View>
-          <View style={[styles.page, { width: SCREEN_WIDTH }]}>
+          </PageWrap>
+          <PageWrap index={1} livePos={livePos}>
             <PromiseScreen active={pageIndex === 1} />
-          </View>
-          <View style={[styles.page, { width: SCREEN_WIDTH }]}>
+          </PageWrap>
+          <PageWrap index={2} livePos={livePos}>
             <PrivacyScreen active={pageIndex === 2} />
-          </View>
-          <View style={[styles.page, { width: SCREEN_WIDTH }]}>
+          </PageWrap>
+          <PageWrap index={3} livePos={livePos}>
             <NameScreen
               active={pageIndex === 3}
               name={name}
               setName={setName}
               onContinue={advance}
             />
-          </View>
-          <View style={[styles.page, { width: SCREEN_WIDTH }]}>
+          </PageWrap>
+          <PageWrap index={4} livePos={livePos}>
             <ReadyScreen active={pageIndex === 4} name={name} onEnter={finish} />
-          </View>
+          </PageWrap>
         </Animated.View>
       </GestureDetector>
 
-      {/* Bottom dot indicator — current page amber, others dim */}
+      {/* Bottom dot indicator — current page lit, others dim */}
       <View pointerEvents="none" style={styles.dots}>
         {Array.from({ length: PAGES }).map((_, i) => (
-          <Dot key={i} index={i} progress={progress} />
+          <Dot key={i} index={i} progress={livePos} />
         ))}
       </View>
     </View>
   );
 }
 
+// ── Per-page wrapper: scale + opacity + parallax based on distance ────────
+function PageWrap({ index, livePos, children }) {
+  const style = useAnimatedStyle(() => {
+    const dist = livePos.value - index;
+    const absDist = Math.abs(dist);
+    const scale = interpolate(absDist, [0, 1], [1, 0.9], Extrapolation.CLAMP);
+    const opacity = interpolate(absDist, [0, 0.6, 1], [1, 0.7, 0.4], Extrapolation.CLAMP);
+    const parallax = dist * SCREEN_WIDTH * 0.12;
+    return {
+      opacity,
+      transform: [
+        { translateX: parallax },
+        { scale },
+      ],
+    };
+  });
+
+  return (
+    <Animated.View style={[{ width: SCREEN_WIDTH }, style]}>
+      {children}
+    </Animated.View>
+  );
+}
+
+// ── Ambient floating orbs ────────────────────────────────────────────────
+function AmbientOrbs({ livePos }) {
+  const t1 = useSharedValue(0);
+  const t2 = useSharedValue(0);
+
+  useEffect(() => {
+    t1.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 9000, easing: Easing.bezier(0.4, 0, 0.6, 1) }),
+        withTiming(0, { duration: 9000, easing: Easing.bezier(0.4, 0, 0.6, 1) })
+      ),
+      -1,
+      false
+    );
+    t2.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 12000, easing: Easing.bezier(0.4, 0, 0.6, 1) }),
+        withTiming(0, { duration: 12000, easing: Easing.bezier(0.4, 0, 0.6, 1) })
+      ),
+      -1,
+      false
+    );
+  }, [t1, t2]);
+
+  const orb1Style = useAnimatedStyle(() => {
+    const drift = interpolate(t1.value, [0, 1], [-30, 30]);
+    const lift = interpolate(t1.value, [0, 1], [0, -22]);
+    const sway = livePos.value * 24;
+    return {
+      transform: [
+        { translateX: drift + sway },
+        { translateY: lift },
+        { scale: 1 + t1.value * 0.05 },
+      ],
+      opacity: 0.55 + t1.value * 0.15,
+    };
+  });
+
+  const orb2Style = useAnimatedStyle(() => {
+    const drift = interpolate(t2.value, [0, 1], [25, -25]);
+    const lift = interpolate(t2.value, [0, 1], [10, -14]);
+    const sway = livePos.value * -28;
+    return {
+      transform: [
+        { translateX: drift + sway },
+        { translateY: lift },
+        { scale: 1 + t2.value * 0.06 },
+      ],
+      opacity: 0.4 + t2.value * 0.18,
+    };
+  });
+
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <Animated.View
+        style={[
+          styles.orb,
+          {
+            top: SCREEN_HEIGHT * 0.18,
+            left: -80,
+            width: 280,
+            height: 280,
+            // Soft rose glow — picks up the new accent.
+            backgroundColor: theme.colors.amber.glow,
+          },
+          orb1Style,
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.orb,
+          {
+            bottom: SCREEN_HEIGHT * 0.22,
+            right: -90,
+            width: 320,
+            height: 320,
+            // Soft yellow-green orb (matches the brand-card star) to balance the cream.
+            backgroundColor: 'rgba(213, 229, 168, 0.10)',
+          },
+          orb2Style,
+        ]}
+      />
+    </View>
+  );
+}
+
 function Dot({ index, progress }) {
   const style = useAnimatedStyle(() => {
-    // Closeness to current page: 1 when active, 0 when far away.
     const dist = Math.min(1, Math.abs(progress.value - index));
     const closeness = 1 - dist;
     const color = interpolateColor(
@@ -190,9 +324,8 @@ function Dot({ index, progress }) {
     );
     return {
       backgroundColor: color,
-      // Gentle width pulse on the active dot.
-      width: 6 + closeness * 6,
-      opacity: 0.5 + closeness * 0.5,
+      width: 6 + closeness * 14,
+      opacity: 0.4 + closeness * 0.6,
     };
   });
 
@@ -203,13 +336,11 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: theme.colors.background.primary,
+    overflow: 'hidden',
   },
   row: {
     flex: 1,
     flexDirection: 'row',
-  },
-  page: {
-    flex: 1,
   },
   dots: {
     position: 'absolute',
@@ -224,5 +355,9 @@ const styles = StyleSheet.create({
   dot: {
     height: 6,
     borderRadius: theme.radii.full,
+  },
+  orb: {
+    position: 'absolute',
+    borderRadius: 9999,
   },
 });

@@ -3,10 +3,14 @@
 // Custom SVG (no victory-native — keeps the look consistent and avoids the
 // Skia dependency that breaks under Expo Go).
 //
+// On mount the chart animates in: the trend line draws itself from left to
+// right (~900ms stroke-offset reveal), the points scale in staggered after
+// the line passes them, and the reference band fades in.
+//
 // Renders:
 //   • a sage-tinted reference range band (if we have ranges)
-//   • a single amber line connecting the points
-//   • amber dots at each measurement, optionally tappable
+//   • a single accent line connecting the points
+//   • accent dots at each measurement, optionally tappable
 //   • lightweight axis grid lines + min/max labels
 //
 // Props:
@@ -14,18 +18,33 @@
 //   referenceLow / referenceHigh: numbers or null
 //   unit: optional unit label
 //   onPointPress: optional (point) => void — passes the original data point
-import React from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Line, Polyline, Rect, Text as SvgText } from 'react-native-svg';
+import Animated, {
+  useSharedValue,
+  useAnimatedProps,
+  withTiming,
+  withDelay,
+  Easing,
+} from 'react-native-reanimated';
 import { format } from 'date-fns';
 
 import theme from '../theme';
+import * as haptics from '../utils/haptics';
+
+const AnimatedPolyline = Animated.createAnimatedComponent(Polyline);
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const AnimatedRect = Animated.createAnimatedComponent(Rect);
 
 const HEIGHT = 220;
 const PAD_L = 36;
 const PAD_R = 16;
 const PAD_T = 18;
 const PAD_B = 28;
+
+const LINE_DRAW_MS = 900;
+const POINT_DURATION_MS = 280;
 
 export default function TrendChart({
   data = [],
@@ -35,30 +54,28 @@ export default function TrendChart({
   onPointPress,
   width = 320,
 }) {
-  if (!data.length) return null;
+  // Hooks must run unconditionally — guard rendering at the bottom instead.
+  const hasData = data.length > 0;
 
   const innerW = width - PAD_L - PAD_R;
   const innerH = HEIGHT - PAD_T - PAD_B;
 
   // Y axis range — include the reference range bounds if present.
-  const valuesForRange = data.map((d) => d.value);
+  const valuesForRange = hasData ? data.map((d) => d.value) : [0, 1];
   if (typeof referenceLow === 'number') valuesForRange.push(referenceLow);
   if (typeof referenceHigh === 'number') valuesForRange.push(referenceHigh);
   let yMin = Math.min(...valuesForRange);
   let yMax = Math.max(...valuesForRange);
   if (yMin === yMax) {
-    // Avoid a zero-span axis on a single point.
     const pad = Math.max(1, Math.abs(yMin) * 0.1);
     yMin -= pad; yMax += pad;
   } else {
-    // 8% breathing room top + bottom.
     const pad = (yMax - yMin) * 0.08;
     yMin -= pad; yMax += pad;
   }
   const ySpan = yMax - yMin || 1;
 
-  // X axis range — by date.
-  const tsMs = data.map((d) => new Date(d.timestamp).getTime());
+  const tsMs = hasData ? data.map((d) => new Date(d.timestamp).getTime()) : [0, 1];
   const xMin = Math.min(...tsMs);
   const xMax = Math.max(...tsMs);
   const xSpan = xMax - xMin || 1;
@@ -69,40 +86,75 @@ export default function TrendChart({
   };
   const y = (v) => PAD_T + innerH - ((v - yMin) / ySpan) * innerH;
 
-  // Reference band rectangle.
   const hasRefRange = typeof referenceLow === 'number' && typeof referenceHigh === 'number';
   const bandTop = hasRefRange ? y(referenceHigh) : 0;
   const bandBottom = hasRefRange ? y(referenceLow) : 0;
   const bandY = Math.min(bandTop, bandBottom);
   const bandH = Math.abs(bandBottom - bandTop);
 
-  const points = data.map((d) => `${x(d.timestamp).toFixed(1)},${y(d.value).toFixed(1)}`).join(' ');
+  // Compute polyline + path length so we can animate the stroke draw.
+  const { polylineStr, pathLength, pointCoords } = useMemo(() => {
+    if (!hasData) return { polylineStr: '', pathLength: 1, pointCoords: [] };
+    const coords = data.map((d) => ({ x: x(d.timestamp), y: y(d.value) }));
+    let total = 0;
+    for (let i = 1; i < coords.length; i++) {
+      const dx = coords[i].x - coords[i - 1].x;
+      const dy = coords[i].y - coords[i - 1].y;
+      total += Math.sqrt(dx * dx + dy * dy);
+    }
+    return {
+      polylineStr: coords.map((c) => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' '),
+      pathLength: Math.max(total, 1),
+      pointCoords: coords,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, width, hasData]);
 
-  // First / last labels for the X axis.
+  // Animation drivers.
+  const lineProgress = useSharedValue(1);   // 1 = hidden, 0 = drawn
+  const bandOpacity = useSharedValue(0);    // 0 → 0.08
+
+  useEffect(() => {
+    if (!hasData) return;
+    lineProgress.value = 1;
+    bandOpacity.value = 0;
+    lineProgress.value = withTiming(0, {
+      duration: LINE_DRAW_MS,
+      easing: Easing.bezier(0.16, 1, 0.3, 1),
+    });
+    bandOpacity.value = withDelay(
+      120,
+      withTiming(0.08, { duration: 700, easing: Easing.out(Easing.cubic) })
+    );
+  }, [data, hasData, lineProgress, bandOpacity]);
+
+  const lineProps = useAnimatedProps(() => ({
+    strokeDashoffset: lineProgress.value * pathLength,
+  }));
+  const bandProps = useAnimatedProps(() => ({
+    opacity: bandOpacity.value,
+  }));
+
+  if (!hasData) return null;
+
   const firstTs = data[0].timestamp;
   const lastTs = data[data.length - 1].timestamp;
 
   return (
     <View style={{ width, height: HEIGHT }}>
       <Svg width={width} height={HEIGHT}>
-        {/* Y axis ticks: yMin and yMax */}
+        {/* Y axis ticks */}
         <SvgText
-          x={PAD_L - 6}
-          y={y(yMax) + 3}
-          fill={theme.colors.text.dim}
-          fontSize="9"
-          textAnchor="end"
-          fontFamily={theme.fonts.mono}
+          x={PAD_L - 6} y={y(yMax) + 3}
+          fill={theme.colors.text.dim} fontSize="9"
+          textAnchor="end" fontFamily={theme.fonts.mono}
         >
           {fmt(yMax)}
         </SvgText>
         <SvgText
-          x={PAD_L - 6}
-          y={y(yMin) + 3}
-          fill={theme.colors.text.dim}
-          fontSize="9"
-          textAnchor="end"
-          fontFamily={theme.fonts.mono}
+          x={PAD_L - 6} y={y(yMin) + 3}
+          fill={theme.colors.text.dim} fontSize="9"
+          textAnchor="end" fontFamily={theme.fonts.mono}
         >
           {fmt(yMin)}
         </SvgText>
@@ -115,15 +167,13 @@ export default function TrendChart({
           strokeWidth={StyleSheet.hairlineWidth}
         />
 
-        {/* Reference band */}
+        {/* Reference band — fades in */}
         {hasRefRange ? (
-          <Rect
-            x={PAD_L}
-            y={bandY}
-            width={innerW}
-            height={bandH}
+          <AnimatedRect
+            x={PAD_L} y={bandY}
+            width={innerW} height={bandH}
             fill={theme.colors.sage}
-            opacity={0.08}
+            animatedProps={bandProps}
           />
         ) : null}
         {/* Reference range edges */}
@@ -142,26 +192,29 @@ export default function TrendChart({
           </>
         ) : null}
 
-        {/* Trend line */}
+        {/* Trend line — draws in left-to-right */}
         {data.length > 1 ? (
-          <Polyline
-            points={points}
+          <AnimatedPolyline
+            points={polylineStr}
             fill="none"
             stroke={theme.colors.amber.primary}
             strokeWidth={2}
             strokeLinecap="round"
             strokeLinejoin="round"
+            strokeDasharray={`${pathLength} ${pathLength}`}
+            animatedProps={lineProps}
           />
         ) : null}
 
-        {/* Points (rendered as plain SVG for the visual; tap layer is below) */}
+        {/* Points — scale in staggered after the line passes through them */}
         {data.map((d, i) => (
-          <Circle
+          <AnimatedDot
             key={i}
-            cx={x(d.timestamp)}
-            cy={y(d.value)}
-            r={4}
-            fill={theme.colors.amber.primary}
+            cx={pointCoords[i]?.x ?? x(d.timestamp)}
+            cy={pointCoords[i]?.y ?? y(d.value)}
+            // Stagger across the same window the line uses, so each dot
+            // appears just as the line "reaches" it.
+            delay={(i / Math.max(1, data.length - 1)) * (LINE_DRAW_MS - 200) + 100}
           />
         ))}
       </Svg>
@@ -172,7 +225,7 @@ export default function TrendChart({
           {data.map((d, i) => (
             <Pressable
               key={i}
-              onPress={() => onPointPress(d)}
+              onPress={() => { haptics.select(); onPointPress(d); }}
               hitSlop={10}
               style={{
                 position: 'absolute',
@@ -196,9 +249,30 @@ export default function TrendChart({
   );
 }
 
+function AnimatedDot({ cx, cy, delay }) {
+  const scale = useSharedValue(0);
+  useEffect(() => {
+    scale.value = 0;
+    scale.value = withDelay(
+      delay,
+      withTiming(1, { duration: POINT_DURATION_MS, easing: Easing.bezier(0.34, 1.56, 0.64, 1) })
+    );
+  }, [scale, delay, cx, cy]);
+  const props = useAnimatedProps(() => ({
+    r: 4 * scale.value,
+  }));
+  return (
+    <AnimatedCircle
+      cx={cx}
+      cy={cy}
+      fill={theme.colors.amber.primary}
+      animatedProps={props}
+    />
+  );
+}
+
 function fmt(v) {
   if (Number.isInteger(v)) return String(v);
-  // Trim noise to 1 decimal for typical lab ranges.
   const r = Math.round(v * 10) / 10;
   return String(r);
 }

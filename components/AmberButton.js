@@ -29,6 +29,8 @@ export default function AmberButton({
   }));
 
   const handlePressIn = () => {
+    // Soft tactile cue the moment the finger lands — feels responsive on iPhone.
+    haptics.soft();
     scale.value = withTiming(0.97, {
       duration: theme.motion.durations.fast,
       easing: theme.motion.easing.standard,
@@ -41,6 +43,7 @@ export default function AmberButton({
     });
   };
   const handlePress = (e) => {
+    // Medium thump on commit — reinforces "this did something".
     haptics.confirm();
     onPress?.(e);
   };

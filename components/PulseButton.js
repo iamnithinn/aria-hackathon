@@ -1,7 +1,10 @@
 // components/PulseButton.js — the home screen's primary action.
 //
-// Circular ~70px amber button with a soft amber glow that pulses on a 4s loop.
-// On press: scale-down + medium haptic + onPress.
+// Circular ~70px accent button with a soft glow that pulses on a 4s loop.
+// Wrap reserves only the visible button's footprint for layout — the halo
+// overflows it (avoids a giant invisible click target above the mic).
+//
+// On press: scale-down + soft haptic on press-in + commit haptic on release.
 //
 // Different from AmberButton (rectangular CTA). This one is the "talk to Aria" call.
 import React, { useEffect } from 'react';
@@ -25,6 +28,7 @@ const AnimatedView = Animated.createAnimatedComponent(View);
 
 const SIZE = 70;
 const HALO = SIZE * 2.4;
+const HALO_INSET = (HALO - SIZE) / 2;
 
 export default function PulseButton({ onPress, icon = 'mic' }) {
   // Press scale.
@@ -53,19 +57,24 @@ export default function PulseButton({ onPress, icon = 'mic' }) {
   }));
 
   const handleIn = () => {
+    // Soft cue on touch-down so the pulse feels alive in the hand.
+    haptics.soft();
     press.value = withTiming(0.94, { duration: 200, easing: theme.motion.easing.standard });
   };
   const handleOut = () => {
     press.value = withTiming(1, { duration: 240, easing: theme.motion.easing.standard });
   };
   const handlePress = (e) => {
-    haptics.confirm();
+    // The voice check-in is the marquee gesture — a confirm + a delayed soft
+    // tail, mimicking the "thunk-and-settle" of a real button.
+    haptics.commit();
     onPress?.(e);
   };
 
   return (
     <View style={styles.wrap} pointerEvents="box-none">
-      {/* Soft halo behind the button — never receives touches */}
+      {/* Soft halo behind the button — absolutely positioned so it overflows
+          the wrap; the wrap only reserves the visible button's footprint. */}
       <AnimatedView pointerEvents="none" style={[styles.halo, haloStyle]}>
         <Svg width={HALO} height={HALO}>
           <Defs>
@@ -99,14 +108,21 @@ export default function PulseButton({ onPress, icon = 'mic' }) {
 }
 
 const styles = StyleSheet.create({
+  // Layout footprint = the visible button only. The halo overflows.
   wrap: {
-    width: HALO,
-    height: HALO,
+    width: SIZE,
+    height: SIZE,
     alignItems: 'center',
     justifyContent: 'center',
   },
   halo: {
     position: 'absolute',
+    width: HALO,
+    height: HALO,
+    top: -HALO_INSET,
+    left: -HALO_INSET,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   button: {
     width: SIZE,

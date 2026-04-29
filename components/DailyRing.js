@@ -1,12 +1,14 @@
 // components/DailyRing.js — the home-screen hero.
 //
-// A large circular progress ring (~280px) that fills based on the user's
-// coherence score (0..100). Inside the ring: today's score in serif numerals.
-// Outside the ring: 4 small dots at top/right/bottom/left for the four metric
-// streams (voice / HRV / sleep / activity). For Stage 2 only the "voice" dot
-// (top) is lit; the rest are dim placeholders for later stages.
+// A circular progress ring that fills based on the user's coherence score
+// (0..100). Inside the ring: today's score in display numerals (rendered
+// by the parent via children). Outside the ring: 4 small dots at
+// top/right/bottom/left for the four metric streams (voice / HRV / sleep /
+// activity). For Stage 2 only the "voice" dot (top) is lit.
 //
-// The ring itself "breathes" — pulses outward by ~2px every 4s.
+// The ring "breathes" — pulses outward by ~2px every 4s.
+//
+// The `size` prop lets callers shrink the ring for tighter layouts.
 import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
@@ -24,19 +26,22 @@ import theme from '../theme';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
-const SIZE = 280;
+const DEFAULT_SIZE = 280;
 const STROKE = 10;
-const RADIUS = (SIZE - STROKE) / 2;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-// Slight inset so dots sit just outside the stroke, not on top of it.
-const DOT_RADIUS_OFFSET = SIZE / 2 + 14;
 
 export default function DailyRing({
   score = 0,           // 0..100
   active = true,       // dim when there's no check-in yet
   voiceLit = false,    // amber-on; otherwise dim
+  size = DEFAULT_SIZE, // ring diameter in pt — caller can shrink for tight layouts
   children,            // optional center content (defaults to score numerals)
 }) {
+  const SIZE = size;
+  const RADIUS = (SIZE - STROKE) / 2;
+  const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+  // Slight inset so dots sit just outside the stroke, not on top of it.
+  const DOT_RADIUS_OFFSET = SIZE / 2 + 14;
+
   // Progress 0..1 — animates whenever score changes.
   const progress = useSharedValue(0);
   // Breath: scales the entire ring slightly, ~2px outward (≈0.014 of size).
@@ -73,7 +78,7 @@ export default function DailyRing({
   const ringColorDim = active ? theme.colors.amber.dim : theme.colors.border.subtle;
 
   return (
-    <Animated.View style={[styles.wrap, wrapperStyle]}>
+    <Animated.View style={[styles.wrap, { width: SIZE, height: SIZE }, wrapperStyle]}>
       <Svg width={SIZE} height={SIZE}>
         <Defs>
           <SvgLinearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
@@ -103,7 +108,6 @@ export default function DailyRing({
           fill="none"
           strokeDasharray={`${CIRCUMFERENCE} ${CIRCUMFERENCE}`}
           animatedProps={ringProps}
-          // Rotate around the center: SVG transform-origin defaults to (0,0).
           transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
         />
       </Svg>
@@ -114,19 +118,19 @@ export default function DailyRing({
       </View>
 
       {/* Four dots: top (voice), right (HRV), bottom (sleep), left (activity) */}
-      <MetricDot angle={-90} lit={voiceLit} label="voice" />
-      <MetricDot angle={0} lit={false} label="hrv" />
-      <MetricDot angle={90} lit={false} label="sleep" />
-      <MetricDot angle={180} lit={false} label="activity" />
+      <MetricDot angle={-90} lit={voiceLit} dotOffset={DOT_RADIUS_OFFSET} />
+      <MetricDot angle={0} lit={false} dotOffset={DOT_RADIUS_OFFSET} />
+      <MetricDot angle={90} lit={false} dotOffset={DOT_RADIUS_OFFSET} />
+      <MetricDot angle={180} lit={false} dotOffset={DOT_RADIUS_OFFSET} />
     </Animated.View>
   );
 }
 
-function MetricDot({ angle, lit }) {
+function MetricDot({ angle, lit, dotOffset }) {
   // Position the dot on a circle one notch outside the ring stroke.
   const rad = (angle * Math.PI) / 180;
-  const dx = Math.cos(rad) * DOT_RADIUS_OFFSET;
-  const dy = Math.sin(rad) * DOT_RADIUS_OFFSET;
+  const dx = Math.cos(rad) * dotOffset;
+  const dy = Math.sin(rad) * dotOffset;
   const color = lit ? theme.colors.amber.primary : theme.colors.border.strong;
   return (
     <View
@@ -135,7 +139,6 @@ function MetricDot({ angle, lit }) {
         styles.metricDot,
         {
           backgroundColor: color,
-          // Soft amber glow if lit — same shadow we use elsewhere.
           ...(lit ? styles.metricDotLitGlow : null),
           transform: [
             { translateX: dx },
@@ -149,8 +152,6 @@ function MetricDot({ angle, lit }) {
 
 const styles = StyleSheet.create({
   wrap: {
-    width: SIZE,
-    height: SIZE,
     alignItems: 'center',
     justifyContent: 'center',
   },
