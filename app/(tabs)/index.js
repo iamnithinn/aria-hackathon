@@ -166,77 +166,91 @@ export default function Home() {
           </View>
         </Reveal>
 
-        {/* ── Hero: Ring + caption + Aria's voice ─────── */}
-        <View style={styles.hero}>
-          <Reveal delay={240} duration={900} style={styles.ringBlock}>
-            <DailyRing
-              score={score}
-              active={!!todayCheckIn}
-              voiceLit={!!todayCheckIn}
-              size={170}
-            >
-              {/* Just the numeral inside the ring, geometrically centered. */}
-              <Text style={styles.scoreNumeral} allowFontScaling={false}>
-                {todayCheckIn ? score : '—'}
-              </Text>
-            </DailyRing>
-            {/* "coherence" caption sits clear of the ring's bottom dot. */}
-            <MonoLabel size={theme.fontSize.xs} style={styles.scoreCaption}>
-              coherence
-            </MonoLabel>
-          </Reveal>
-          <Reveal delay={520} duration={700} style={styles.voiceWrap}>
-            {ariaVoice}
-          </Reveal>
-        </View>
+        {/* ── Three invisible boxes with explicit flex spacer ──
+            BOX 1: ring + coherence caption + Aria's voice
+            (flex spacer absorbs all leftover space here)
+            BOX 2: quick action grid + meal anchor / nutrition strip
+            BOX 3: pulse mic + check-in label
+            (BOX 4 = the floating tab bar, lives outside this layout.)
 
-        {/* ── Quick grid: every feature reachable in one tap ── */}
-        <Reveal delay={680}>
-          <View style={styles.quickRow}>
-            <QuickButton icon="archive" label="vault" onPress={() => router.push('/vault')} />
-            <QuickButton icon="droplet" label="meds" onPress={() => router.push('/medications')} />
-            <QuickButton icon="coffee" label="meals" onPress={() => router.push('/nutrition')} />
-            <QuickButton icon="trending-up" label="trends" onPress={() => router.push('/vault')} />
-            <QuickButton icon="activity" label="training" onPress={goTraining} />
-            <QuickButton icon="file-text" label="brief" onPress={() => router.push('/bridge')} />
+            The `flex: 1` spacer view is more reliable than marginTop:'auto'
+            on iOS — it guarantees BOX 2 + BOX 3 stay anchored to the bottom
+            regardless of available height, while BOX 1 hugs the top. */}
+        <View style={styles.boxesWrap}>
+          {/* BOX 1 */}
+          <View style={styles.boxRing}>
+            <Reveal delay={240} duration={900} style={styles.ringBlock}>
+              <DailyRing
+                score={score}
+                active={!!todayCheckIn}
+                voiceLit={!!todayCheckIn}
+                size={170}
+              >
+                {/* Just the numeral inside the ring, geometrically centered. */}
+                <Text style={styles.scoreNumeral} allowFontScaling={false}>
+                  {todayCheckIn ? score : '—'}
+                </Text>
+              </DailyRing>
+              {/* "coherence" caption sits clear of the ring's bottom dot. */}
+              <MonoLabel size={theme.fontSize.xs} style={styles.scoreCaption}>
+                coherence
+              </MonoLabel>
+            </Reveal>
+            <Reveal delay={520} duration={700} style={styles.voiceWrap}>
+              {ariaVoice}
+            </Reveal>
           </View>
-        </Reveal>
 
-        {/* ── Log-a-meal anchor / today's nutrition strip ── */}
-        <Reveal delay={780}>
-          <View style={styles.mealRow}>
-            {todayMeals.length > 0 ? (
-              <View style={styles.nutStrip}>
-                <NutPill label="kcal" value={Math.round(todayTotals.calories)} />
-                <NutPill label="protein" value={`${formatNum(todayTotals.protein_g)}g`} />
-                <NutPill label="carbs" value={`${formatNum(todayTotals.carbs_g)}g`} />
+          {/* Flex spacer — eats every leftover pt above BOX 2.
+              This is what visually drops the actions cluster to the bottom. */}
+          <View style={styles.spacer} />
+
+          {/* BOX 2 */}
+          <View style={styles.boxActions}>
+            <Reveal delay={680}>
+              <View style={styles.quickRow}>
+                <QuickButton icon="archive" label="vault" onPress={() => router.push('/vault')} />
+                <QuickButton icon="droplet" label="meds" onPress={() => router.push('/medications')} />
+                <QuickButton icon="coffee" label="meals" onPress={() => router.push('/nutrition')} />
+                <QuickButton icon="trending-up" label="trends" onPress={() => router.push('/vault')} />
+                <QuickButton icon="activity" label="training" onPress={goTraining} />
+                <QuickButton icon="file-text" label="brief" onPress={() => router.push('/bridge')} />
+              </View>
+            </Reveal>
+            <Reveal delay={780} style={styles.mealRow}>
+              {todayMeals.length > 0 ? (
+                <View style={styles.nutStrip}>
+                  <NutPill label="kcal" value={Math.round(todayTotals.calories)} />
+                  <NutPill label="protein" value={`${formatNum(todayTotals.protein_g)}g`} />
+                  <NutPill label="carbs" value={`${formatNum(todayTotals.carbs_g)}g`} />
+                  <Pressable
+                    onPress={() => { haptics.tap(); router.push('/nutrition/log'); }}
+                    style={({ pressed }) => [styles.addMealBtn, pressed && { opacity: 0.85 }]}
+                    hitSlop={6}
+                  >
+                    <Feather name="plus" size={14} color={theme.colors.amber.primary} />
+                  </Pressable>
+                </View>
+              ) : (
                 <Pressable
                   onPress={() => { haptics.tap(); router.push('/nutrition/log'); }}
-                  style={({ pressed }) => [styles.addMealBtn, pressed && { opacity: 0.85 }]}
-                  hitSlop={6}
+                  style={({ pressed }) => [styles.logMealBtn, pressed && { opacity: 0.85 }]}
                 >
-                  <Feather name="plus" size={14} color={theme.colors.amber.primary} />
+                  <Feather name="mic" size={14} color={theme.colors.amber.primary} />
+                  <Text style={styles.logMealLabel}>Log a meal</Text>
                 </Pressable>
-              </View>
-            ) : (
-              <Pressable
-                onPress={() => { haptics.tap(); router.push('/nutrition/log'); }}
-                style={({ pressed }) => [styles.logMealBtn, pressed && { opacity: 0.85 }]}
-              >
-                <Feather name="mic" size={14} color={theme.colors.amber.primary} />
-                <Text style={styles.logMealLabel}>Log a meal</Text>
-              </Pressable>
-            )}
+              )}
+            </Reveal>
           </View>
-        </Reveal>
 
-        {/* ── Pulse: voice check-in ─────────────────── */}
-        <Reveal delay={900} duration={700} style={styles.footer}>
-          <PulseButton onPress={() => router.push('/checkin')} />
-          <MonoLabel size={theme.fontSize.xs} style={styles.footerLabel}>
-            {todayCheckIn ? 'check in again' : "today's check-in"}
-          </MonoLabel>
-        </Reveal>
+          {/* BOX 3 */}
+          <Reveal delay={900} duration={700} style={styles.boxPulse}>
+            <PulseButton onPress={() => router.push('/checkin')} />
+            <MonoLabel size={theme.fontSize.xs} style={styles.footerLabel}>
+              {todayCheckIn ? 'check in again' : "today's check-in"}
+            </MonoLabel>
+          </Reveal>
+        </View>
       </View>
     </Screen>
   );
@@ -377,16 +391,41 @@ const styles = StyleSheet.create({
     borderRadius: theme.radii.full,
     backgroundColor: theme.colors.text.dim,
   },
-  // ── Hero ───────────────────────────────────────────
-  // flex:1 lets the hero absorb leftover vertical space so the ring sits
-  // mid-screen and the action cluster (quick → meal → pulse) anchors near
-  // the bottom in one continuous rhythm — instead of all the controls
-  // bunching at the top with a void above the mic.
-  hero: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: theme.spacing.md,
+  // ── Three-box wrapper ──────────────────────────────
+  // Asymmetric rhythm: Box 1 (ring + voice) sits at the top of the available
+  // space, then a generous flex gap, then Box 2 (actions) and Box 3 (pulse)
+  // sit tight against each other near the bottom — no breathing room between
+  // the meal pill and the mic.
+  //
+  // marginTop is intentionally large (~2 cm in physical pt) so the ring
+  // visibly sits lower on the screen — the upper cluster is shifted down,
+  // while Box 2's marginTop:'auto' keeps the actions+pulse cluster anchored
+  // at the bottom (mic + tab bar never scroll off-screen).
+  boxesWrap: {
     flex: 1,
+    marginTop: 80,
+  },
+  // BOX 1 — ring + caption + voice line, centered
+  boxRing: {
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  // The flex spacer between BOX 1 and BOX 2 absorbs all leftover vertical
+  // space — guaranteed to push BOX 2 (and BOX 3 below it) to the bottom on
+  // every device, including iOS where marginTop:'auto' was inconsistent.
+  spacer: {
+    flex: 1,
+  },
+  // BOX 2 — quick row (full-width) + meal anchor (centered).
+  boxActions: {
+    gap: theme.spacing.md,
+  },
+  // BOX 3 — mic + check-in label, centered. Effectively flush against
+  // BOX 2 — the mic and the nutrition strip read as a single unit.
+  boxPulse: {
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginTop: 2,
   },
   // Ring + caption render as a tight block; caption clears the ring's
   // bottom dot (which lives 14pt outside the SVG circle).
@@ -418,11 +457,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   // ── Quick row ──────────────────────────────────────
+  // No marginTop — the parent box (boxActions) handles vertical rhythm via gap.
   quickRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginTop: theme.spacing.md,
   },
   quickItem: { alignItems: 'center', gap: 6, flex: 1 },
   quickCircle: {
@@ -442,8 +481,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   // ── Meal row ───────────────────────────────────────
+  // No marginTop — boxActions controls the gap to the quick row.
   mealRow: {
-    marginTop: theme.spacing.md,
     alignItems: 'center',
   },
   logMealBtn: {
@@ -496,14 +535,6 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth * 2,
     borderColor: theme.colors.amber.dim,
     backgroundColor: theme.colors.background.secondary,
-  },
-  // ── Footer ─────────────────────────────────────────
-  // Fixed margin (not 'auto') so the pulse stays close to the meal pill —
-  // hero's flex:1 already absorbs the spare space above.
-  footer: {
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    marginTop: theme.spacing.lg,
   },
   footerLabel: { color: theme.colors.text.dim },
 });

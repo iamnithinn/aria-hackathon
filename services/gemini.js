@@ -370,7 +370,10 @@ function explainGeminiError(status, body) {
 
 // One-shot health probe — call once at app boot. Logs a clear, prominent
 // banner if Gemini is unreachable so the dev sees it without digging.
+// On a transient network error we retry exactly once after 4s; after that we
+// give up quietly (a warn, not a red error overlay).
 let probed = false;
+let probeRetried = false;
 export async function probeGemini() {
   if (probed) return;
   probed = true;
@@ -410,12 +413,25 @@ export async function probeGemini() {
     }
     console.log(`[gemini/probe] OK — ${GEMINI_MODEL} reachable.`);
   } catch (err) {
-    console.error(
-      '\n══════════════════════════════════════════════════════\n' +
-      '  ARIA: GEMINI HEALTH CHECK NETWORK ERROR\n' +
-      `  ${err?.message || err}\n` +
-      '══════════════════════════════════════════════════════\n'
-    );
+    // Network errors at boot are usually transient (cold-start before the
+    // device has DNS / cell connectivity ready). Downgrade from console.error
+    // to console.warn so RN's LogBox doesn't flag a red overlay.
+    if (!probeRetried) {
+      probeRetried = true;
+      console.warn(
+        `[gemini/probe] network error: ${err?.message || err}. retrying in 4s…`
+      );
+      // Allow the retry to actually run (probed = true blocks re-entry otherwise).
+      probed = false;
+      setTimeout(() => {
+        probeGemini().catch(() => { /* swallowed — best-effort */ });
+      }, 4000);
+    } else {
+      console.warn(
+        `[gemini/probe] still unreachable after retry: ${err?.message || err}. ` +
+        `Giving up — features will surface their own errors when invoked.`
+      );
+    }
   }
 }
 
