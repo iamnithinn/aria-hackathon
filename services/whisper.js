@@ -70,7 +70,11 @@ export async function transcribe(audioFileUri) {
     ],
     generationConfig: {
       temperature: 0.1,
-      maxOutputTokens: 2048,
+      // Disable thinking — pure transcription doesn't need extended reasoning,
+      // and on gemini-2.5-pro thinking can swallow the full token budget
+      // before any text is emitted.
+      thinkingConfig: { thinkingBudget: 0 },
+      maxOutputTokens: 4096,
     },
   };
 
@@ -91,9 +95,17 @@ export async function transcribe(audioFileUri) {
       return '';
     }
     const data = await res.json();
-    const text = (data?.candidates?.[0]?.content?.parts || [])
-      .map((p) => p.text || '')
-      .join('');
+    const candidate = data?.candidates?.[0];
+    const finishReason = candidate?.finishReason;
+    const usage = data?.usageMetadata || {};
+    const text = (candidate?.content?.parts || []).map((p) => p.text || '').join('');
+    if (!text) {
+      console.error(
+        `[transcribe] EMPTY RESPONSE\n` +
+        `  finishReason: ${finishReason}\n` +
+        `  tokens     : in=${usage.promptTokenCount || 0}  thoughts=${usage.thoughtsTokenCount || 0}  out=${usage.candidatesTokenCount || 0}`
+      );
+    }
     return tidy(text);
   } catch (err) {
     console.warn('[transcribe] request failed', err);

@@ -133,7 +133,12 @@ export async function extractDocument(imageUri) {
       // Force JSON output mode so we don't need to chase markdown fences.
       responseMimeType: 'application/json',
       temperature: 0.2,
-      maxOutputTokens: 2048,
+      // gemini-2.5-pro burns tokens on extended "thinking" before producing
+      // output. For a structured extraction task we don't want that — disable
+      // it so the full token budget goes to the JSON answer.
+      thinkingConfig: { thinkingBudget: 0 },
+      // Generous so a verbose prescription's rawText fits without MAX_TOKENS.
+      maxOutputTokens: 8192,
     },
   };
 
@@ -164,16 +169,38 @@ export async function extractDocument(imageUri) {
   try {
     payload = await res.json();
   } catch (err) {
-    console.warn('[gemini] JSON-of-response failed', err);
+    console.warn('[gemini/vision] JSON-of-response failed', err);
     return { ...FALLBACK, summary: 'Aria could not parse Gemini\'s reply.' };
   }
 
-  const text = payload?.candidates?.[0]?.content?.parts
-    ?.map((p) => p.text || '')
-    .join('') || '';
+  const candidate = payload?.candidates?.[0];
+  const finishReason = candidate?.finishReason;
+  const usage = payload?.usageMetadata || {};
+  const text = candidate?.content?.parts?.map((p) => p.text || '').join('') || '';
+
+  console.log(
+    `[gemini/vision] response\n` +
+    `  finishReason: ${finishReason}\n` +
+    `  tokens     : in=${usage.promptTokenCount || 0}  thoughts=${usage.thoughtsTokenCount || 0}  out=${usage.candidatesTokenCount || 0}\n` +
+    `  text length: ${text.length}\n` +
+    `  text head  : ${text.slice(0, 240).replace(/\n/g, ' ')}`
+  );
+
+  // Empty-output guard: model finished without producing anything (usually
+  // MAX_TOKENS exhausted by thinking before the JSON could land).
+  if (!text) {
+    console.error(
+      `[gemini/vision] EMPTY RESPONSE\n` +
+      `  finishReason: ${finishReason}\n` +
+      `  Likely cause: maxOutputTokens too low or thinking budget consumed it.\n` +
+      `  Token usage: in=${usage.promptTokenCount}  thoughts=${usage.thoughtsTokenCount}  out=${usage.candidatesTokenCount}`
+    );
+    return { ...FALLBACK, summary: 'Aria saw the document but ran out of room to write its notes.' };
+  }
+
   const parsed = extractJson(text);
   if (!parsed) {
-    console.warn('[gemini] could not extract JSON from text:', text.slice(0, 200));
+    console.warn('[gemini/vision] could not extract JSON from text. First 500 chars:\n', text.slice(0, 500));
     return { ...FALLBACK, rawText: text, summary: 'Aria saw the document but could not structure it.' };
   }
 
@@ -214,6 +241,10 @@ export async function geminiText({
   maxTokens = 1500,
   temperature = 0.4,
   jsonMode = false,
+  // gemini-2.5-pro burns tokens on extended thinking by default. For a demo
+  // that prizes responsiveness + predictable token budgets, we disable it.
+  // Set thinking: true on a per-call basis if you want the deeper reasoning.
+  thinking = false,
 }) {
   const key = getKey();
   if (!key) {
@@ -226,6 +257,7 @@ export async function geminiText({
       maxOutputTokens: maxTokens,
       temperature,
       ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
+      ...(thinking ? {} : { thinkingConfig: { thinkingBudget: 0 } }),
     },
   };
   if (system) {
@@ -263,9 +295,20 @@ export async function geminiText({
     return { text: '', error: 'json' };
   }
 
-  const text = (payload?.candidates?.[0]?.content?.parts || [])
-    .map((p) => p.text || '')
-    .join('');
+  const candidate = payload?.candidates?.[0];
+  const finishReason = candidate?.finishReason;
+  const usage = payload?.usageMetadata || {};
+  const text = (candidate?.content?.parts || []).map((p) => p.text || '').join('');
+
+  if (!text) {
+    console.error(
+      `[gemini/text] EMPTY RESPONSE\n` +
+      `  finishReason: ${finishReason}\n` +
+      `  tokens     : in=${usage.promptTokenCount || 0}  thoughts=${usage.thoughtsTokenCount || 0}  out=${usage.candidatesTokenCount || 0}\n` +
+      `  Likely cause: maxOutputTokens too low or thinking budget consumed it.`
+    );
+    return { text: '', error: 'empty' };
+  }
   return { text };
 }
 
