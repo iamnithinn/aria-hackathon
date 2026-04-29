@@ -10,15 +10,20 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
 // Paid-tier configuration. Verified end-to-end with the user's key:
-//   gemini-3-pro-preview   200 OK but timed out > 30s (extended thinking)
-//   gemini-2.5-pro         200 OK in ~3.2s, valid JSON ← chosen
-//   gemini-2.5-flash       200 OK in ~1.9s, valid JSON
+//   gemini-3-pro-preview   200 OK but >30s (extended thinking dominates)
+//   gemini-2.5-pro         REQUIRES thinking mode; thinkingBudget: 0 returns
+//                          400. Thinking ALSO consumes maxOutputTokens, so
+//                          short-output calls (sentiment, meal-context) get
+//                          MAX_TOKENS-truncated JSON. Bad fit for this app.
+//   gemini-2.5-flash       Supports thinkingBudget: 0; with thinking off it
+//                          replies in ~1.6s and never starves the budget.
+//                          Multimodal (vision + audio), JSON mode, generous
+//                          paid-tier RPM. ← chosen.
 //
-// gemini-2.5-pro is the sweet spot: top stable-tier reasoning quality, fast
-// enough to fit inside the 4.5s processing rituals, multimodal (vision +
-// audio + text) so the same model serves transcription, document extraction,
-// and reasoning. If the demo ever feels sluggish, drop to gemini-2.5-flash.
-export const GEMINI_MODEL = 'gemini-2.5-pro';
+// If you ever need deeper reasoning for a single call, override per-call
+// (or temporarily flip this constant to gemini-2.5-pro and bump that
+// caller's maxTokens to cover ~600 tokens of internal thinking).
+export const GEMINI_MODEL = 'gemini-2.5-flash';
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 const SYSTEM_PROMPT = `You are Aria's document extraction module. You receive a photograph of a medical document — could be a lab report, a prescription, a discharge summary, an imaging report, or something else. Your job is to extract its contents into a precise structured JSON.
@@ -133,11 +138,10 @@ export async function extractDocument(imageUri) {
       // Force JSON output mode so we don't need to chase markdown fences.
       responseMimeType: 'application/json',
       temperature: 0.2,
-      // gemini-2.5-pro burns tokens on extended "thinking" before producing
-      // output. For a structured extraction task we don't want that — disable
-      // it so the full token budget goes to the JSON answer.
+      // Disable thinking — gemini-2.5-flash supports this, and pure
+      // structured extraction doesn't benefit from extended reasoning.
       thinkingConfig: { thinkingBudget: 0 },
-      // Generous so a verbose prescription's rawText fits without MAX_TOKENS.
+      // Generous so a verbose prescription's rawText fits.
       maxOutputTokens: 8192,
     },
   };
@@ -241,10 +245,6 @@ export async function geminiText({
   maxTokens = 1500,
   temperature = 0.4,
   jsonMode = false,
-  // gemini-2.5-pro burns tokens on extended thinking by default. For a demo
-  // that prizes responsiveness + predictable token budgets, we disable it.
-  // Set thinking: true on a per-call basis if you want the deeper reasoning.
-  thinking = false,
 }) {
   const key = getKey();
   if (!key) {
@@ -254,10 +254,13 @@ export async function geminiText({
   const body = {
     contents: [{ role: 'user', parts: [{ text: String(user || '') }] }],
     generationConfig: {
+      // Disable thinking — predictable token accounting + faster responses.
+      // gemini-2.5-flash supports this; gemini-2.5-pro does not (it would
+      // 400 here — see services/gemini.js GEMINI_MODEL comment).
+      thinkingConfig: { thinkingBudget: 0 },
       maxOutputTokens: maxTokens,
       temperature,
       ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
-      ...(thinking ? {} : { thinkingConfig: { thinkingBudget: 0 } }),
     },
   };
   if (system) {

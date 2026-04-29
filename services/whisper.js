@@ -70,9 +70,8 @@ export async function transcribe(audioFileUri) {
     ],
     generationConfig: {
       temperature: 0.1,
-      // Disable thinking — pure transcription doesn't need extended reasoning,
-      // and on gemini-2.5-pro thinking can swallow the full token budget
-      // before any text is emitted.
+      // Disable thinking — pure transcription doesn't need it. gemini-2.5-flash
+      // supports thinkingBudget: 0; gemini-2.5-pro would reject this.
       thinkingConfig: { thinkingBudget: 0 },
       maxOutputTokens: 4096,
     },
