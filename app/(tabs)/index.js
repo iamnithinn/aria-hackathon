@@ -418,16 +418,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: theme.spacing.sm,
-    flexWrap: 'wrap',
     justifyContent: 'center',
   },
 
   nutPill: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    gap: 6,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 6,
+    gap: 4,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 8,
     borderRadius: theme.radii.full,
     borderWidth: StyleSheet.hairlineWidth * 2,
     borderColor: theme.colors.border.subtle,
@@ -446,8 +445,8 @@ const styles = StyleSheet.create({
   },
 
   addMealBtn: {
-    width: 30,
-    height: 30,
+    width: 34,
+    height: 34,
     borderRadius: theme.radii.full,
     alignItems: 'center',
     justifyContent: 'center',
@@ -479,7 +478,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: theme.spacing.md,
-    marginTop: theme.spacing.xl,
+    marginTop: 'auto',
+    marginBottom: 'auto',
   },
 
   footer: {
