@@ -208,7 +208,7 @@ export default function Home() {
                       pressed && { opacity: 0.85 },
                     ]}
                   >
-                    <Feather name="plus" size={14} color={theme.colors.amber.primary} />
+                    <Feather name="mic" size={14} color={theme.colors.amber.primary} />
                   </Pressable>
                 </View>
               ) : (
@@ -351,7 +351,6 @@ const styles = StyleSheet.create({
   },
 
   middle: {
-    flexGrow: 1,
     gap: theme.spacing.xl,
   },
 
@@ -480,7 +479,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: theme.spacing.md,
-    marginTop: 'auto',
+    marginTop: theme.spacing.xl,
   },
 
   footer: {
