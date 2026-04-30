@@ -39,8 +39,10 @@ export default function DailyRing({
   const SIZE = size;
   const RADIUS = (SIZE - STROKE) / 2;
   const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-  // Slight inset so dots sit just outside the stroke, not on top of it.
-  const DOT_RADIUS_OFFSET = SIZE / 2 + 14;
+  // Dots sit right against the ring stroke (was +14, which let the top dot
+  // bleed into the date/weather row above the ring). +3 keeps them visually
+  // attached to the ring without stealing space from neighbouring content.
+  const DOT_RADIUS_OFFSET = SIZE / 2 + 3;
 
   // Progress 0..1 — animates whenever score changes.
   const progress = useSharedValue(0);

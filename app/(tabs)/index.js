@@ -1,14 +1,5 @@
-// app/(tabs)/index.js — home (compact, no-scroll layout).
-//
-// Layout (top → bottom, fits a single viewport):
-//   1. "aria." wordmark (centered) + meds chip (right)
-//   2. Date  ·  weather row
-//   3. Daily Ring (compact) with "coherence" caption + Aria's voice line
-//   4. Quick action grid (vault · meds · meals · trends · training · brief)
-//   5. "Log a meal" pill / today's nutrition strip — anchored, not floating
-//   6. Pulse button (today's voice check-in)
-//
-// Long-press the "aria." wordmark for ~1.2s → loads the Priya demo data.
+// app/(tabs)/index.js
+
 import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -24,18 +15,21 @@ import PulseButton from '../../components/PulseButton';
 import Chip from '../../components/Chip';
 import Reveal from '../../components/Reveal';
 import * as haptics from '../../utils/haptics';
+
 import {
   getMemory,
   getActiveMedications,
   getTodaysMeals,
   getTrainingProfile,
 } from '../../services/memory';
+
 import { computeCoherence } from '../../services/coherence';
 import { loadPriyaDemo } from '../../services/demoData';
 import { getWeather } from '../../services/weather';
 
 export default function Home() {
   const router = useRouter();
+
   const [mem, setMem] = useState(null);
   const [activeMedCount, setActiveMedCount] = useState(0);
   const [todayMeals, setTodayMeals] = useState([]);
@@ -45,10 +39,13 @@ export default function Home() {
   const reload = useCallback(async () => {
     const m = await getMemory();
     setMem(m);
+
     const meds = await getActiveMedications();
     setActiveMedCount(meds.length);
+
     const meals = await getTodaysMeals();
     setTodayMeals(meals);
+
     const tp = await getTrainingProfile();
     setTraining(tp);
   }, []);
@@ -59,7 +56,6 @@ export default function Home() {
     }, [reload])
   );
 
-  // Weather is best-effort — don't block UI on it. Refresh on mount only.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -70,8 +66,12 @@ export default function Home() {
   }, []);
 
   const todayCheckIn = findTodayCheckIn(mem);
-  const score = todayCheckIn ? computeCoherence(todayCheckIn.audioFeatures, mem?.baselines) : 0;
+  const score = todayCheckIn
+    ? computeCoherence(todayCheckIn.audioFeatures, mem?.baselines)
+    : 0;
+
   const dateStr = format(new Date(), 'EEE, MMM d');
+
   const todayTotals = todayMeals.reduce((acc, m) => ({
     calories: acc.calories + (m.totals?.calories || 0),
     protein_g: acc.protein_g + (m.totals?.protein_g || 0),
@@ -82,16 +82,14 @@ export default function Home() {
   const todaysWorkoutDay = pickTodaysTrainingDay(training);
 
   const handleLogoLongPress = () => {
-    // Rigid pulse to confirm the long-press registered before the dialog.
     haptics.rigid();
     Alert.alert(
       'Load Priya demo data?',
-      "Replaces everything currently in memory with a rich, lived-in dataset.",
+      'Replaces everything currently in memory.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Load',
-          style: 'default',
           onPress: async () => {
             haptics.confirm();
             await loadPriyaDemo();
@@ -115,37 +113,37 @@ export default function Home() {
   return (
     <Screen>
       <View style={styles.container}>
-        {/* ── Header: aria. wordmark + meds chip ───────── */}
+
+        {/* HEADER */}
         <Reveal delay={60}>
           <View style={styles.headerRow}>
-            <View style={styles.headerSide} />
-            <Pressable
-              onLongPress={handleLogoLongPress}
-              delayLongPress={1200}
-              style={styles.logoWrap}
-              hitSlop={8}
-            >
+            <View style={{ flex: 1 }} />
+
+            <Pressable onLongPress={handleLogoLongPress} style={styles.logoWrap}>
               <Text style={styles.brand}>aria</Text>
               <Text style={styles.brandDot}>.</Text>
             </Pressable>
-            <View style={[styles.headerSide, styles.headerSideRight]}>
-              {activeMedCount > 0 ? (
-                <Pressable onPress={() => { haptics.tap(); router.push('/medications'); }} hitSlop={8}>
+
+            <View style={{ flex: 1, alignItems: 'flex-end' }}>
+              {activeMedCount > 0 && (
+                <Pressable onPress={() => router.push('/medications')}>
                   <Chip label={`${activeMedCount} active`} tone="amber" />
                 </Pressable>
-              ) : null}
+              )}
             </View>
           </View>
         </Reveal>
 
-        {/* ── Date · weather row ─────────────────────── */}
+        {/* META ROW */}
         <Reveal delay={140}>
           <View style={styles.metaRow}>
             <View style={styles.metaItem}>
               <Feather name="calendar" size={13} color={theme.colors.text.tertiary} />
               <Text style={styles.metaText}>{dateStr}</Text>
             </View>
+
             <View style={styles.metaDot} />
+
             <View style={styles.metaItem}>
               {weather ? (
                 <>
@@ -166,106 +164,89 @@ export default function Home() {
           </View>
         </Reveal>
 
-        {/* ── Three invisible boxes with explicit flex spacer ──
-            BOX 1: ring + coherence caption + Aria's voice
-            (flex spacer absorbs all leftover space here)
-            BOX 2: quick action grid + meal anchor / nutrition strip
-            BOX 3: pulse mic + check-in label
-            (BOX 4 = the floating tab bar, lives outside this layout.)
+        {/* MIDDLE */}
+        <View style={styles.middle}>
 
-            The `flex: 1` spacer view is more reliable than marginTop:'auto'
-            on iOS — it guarantees BOX 2 + BOX 3 stay anchored to the bottom
-            regardless of available height, while BOX 1 hugs the top. */}
-        <View style={styles.boxesWrap}>
-          {/* BOX 1 */}
+          {/* RING + VOICE */}
           <View style={styles.boxRing}>
-            <Reveal delay={240} duration={900} style={styles.ringBlock}>
-              <DailyRing
-                score={score}
-                active={!!todayCheckIn}
-                voiceLit={!!todayCheckIn}
-                size={170}
-              >
-                {/* Just the numeral inside the ring, geometrically centered. */}
-                <Text style={styles.scoreNumeral} allowFontScaling={false}>
-                  {todayCheckIn ? score : '—'}
-                </Text>
-              </DailyRing>
-              {/* "coherence" caption sits clear of the ring's bottom dot. */}
-              <MonoLabel size={theme.fontSize.xs} style={styles.scoreCaption}>
-                coherence
-              </MonoLabel>
-            </Reveal>
-            <Reveal delay={520} duration={700} style={styles.voiceWrap}>
+            <DailyRing size={170}>
+              <Text style={styles.score}>
+                {todayCheckIn ? score : '—'}
+              </Text>
+            </DailyRing>
+
+            <MonoLabel style={styles.caption}>coherence</MonoLabel>
+
+            <View style={styles.voiceWrap}>
               {ariaVoice}
-            </Reveal>
+            </View>
           </View>
 
-          {/* Flex spacer — eats every leftover pt above BOX 2.
-              This is what visually drops the actions cluster to the bottom. */}
-          <View style={styles.spacer} />
-
-          {/* BOX 2 */}
+          {/* ACTIONS */}
           <View style={styles.boxActions}>
-            <Reveal delay={680}>
-              <View style={styles.quickRow}>
-                <QuickButton icon="archive" label="vault" onPress={() => router.push('/vault')} />
-                <QuickButton icon="droplet" label="meds" onPress={() => router.push('/medications')} />
-                <QuickButton icon="coffee" label="meals" onPress={() => router.push('/nutrition')} />
-                <QuickButton icon="trending-up" label="trends" onPress={() => router.push('/vault')} />
-                <QuickButton icon="activity" label="training" onPress={goTraining} />
-                <QuickButton icon="file-text" label="brief" onPress={() => router.push('/bridge')} />
-              </View>
-            </Reveal>
-            <Reveal delay={780} style={styles.mealRow}>
+
+            <View style={styles.quickRow}>
+              <QuickButton icon="archive" label="vault" onPress={() => router.push('/vault')} />
+              <QuickButton icon="droplet" label="meds" onPress={() => router.push('/medications')} />
+              <QuickButton icon="coffee" label="meals" onPress={() => router.push('/nutrition')} />
+              <QuickButton icon="trending-up" label="trends" onPress={() => router.push('/vault')} />
+              <QuickButton icon="activity" label="training" onPress={goTraining} />
+              <QuickButton icon="file-text" label="brief" onPress={() => router.push('/bridge')} />
+            </View>
+
+            <View style={styles.mealRow}>
               {todayMeals.length > 0 ? (
                 <View style={styles.nutStrip}>
                   <NutPill label="kcal" value={Math.round(todayTotals.calories)} />
                   <NutPill label="protein" value={`${formatNum(todayTotals.protein_g)}g`} />
                   <NutPill label="carbs" value={`${formatNum(todayTotals.carbs_g)}g`} />
+
                   <Pressable
-                    onPress={() => { haptics.tap(); router.push('/nutrition/log'); }}
-                    style={({ pressed }) => [styles.addMealBtn, pressed && { opacity: 0.85 }]}
-                    hitSlop={6}
+                    onPress={() => router.push('/nutrition/log')}
+                    style={({ pressed }) => [
+                      styles.addMealBtn,
+                      pressed && { opacity: 0.85 },
+                    ]}
                   >
                     <Feather name="plus" size={14} color={theme.colors.amber.primary} />
                   </Pressable>
                 </View>
               ) : (
                 <Pressable
-                  onPress={() => { haptics.tap(); router.push('/nutrition/log'); }}
-                  style={({ pressed }) => [styles.logMealBtn, pressed && { opacity: 0.85 }]}
+                  onPress={() => router.push('/nutrition/log')}
+                  style={({ pressed }) => [
+                    styles.logMealBtn,
+                    pressed && { opacity: 0.85 },
+                  ]}
                 >
                   <Feather name="mic" size={14} color={theme.colors.amber.primary} />
                   <Text style={styles.logMealLabel}>Log a meal</Text>
                 </Pressable>
               )}
-            </Reveal>
-          </View>
+            </View>
 
-          {/* BOX 3 */}
-          <Reveal delay={900} duration={700} style={styles.boxPulse}>
-            <PulseButton onPress={() => router.push('/checkin')} />
-            <MonoLabel size={theme.fontSize.xs} style={styles.footerLabel}>
-              {todayCheckIn ? 'check in again' : "today's check-in"}
-            </MonoLabel>
-          </Reveal>
+          </View>
         </View>
+
+        {/* MIC */}
+        <View style={styles.boxPulse}>
+          <PulseButton onPress={() => router.push('/checkin')} />
+          <MonoLabel style={styles.footer}>
+            {todayCheckIn ? 'tap to share' : 'tap to talk'}
+          </MonoLabel>
+        </View>
+
       </View>
     </Screen>
   );
 }
 
-// ─── Components ──────────────────────────────────────────
+/* COMPONENTS */
+
 function QuickButton({ icon, label, onPress }) {
   return (
-    <Pressable
-      onPress={() => { haptics.tap(); onPress?.(); }}
-      style={({ pressed }) => [styles.quickItem, pressed && { opacity: 0.85 }]}
-    >
-      <View style={styles.quickCircle}>
-        <Feather name={icon} size={18} color={theme.colors.amber.primary} />
-      </View>
+    <Pressable onPress={onPress} style={styles.quickCell}>
+      <Feather name={icon} size={18} color={theme.colors.amber.primary} />
       <Text style={styles.quickLabel}>{label}</Text>
     </Pressable>
   );
@@ -275,54 +256,29 @@ function NutPill({ label, value }) {
   return (
     <View style={styles.nutPill}>
       <Text style={styles.nutValue}>{value}</Text>
-      <MonoLabel size={9} style={styles.nutLabelText}>{label}</MonoLabel>
+      <MonoLabel size={9} style={styles.nutLabelText}>
+        {label}
+      </MonoLabel>
     </View>
   );
 }
 
-// ─── Helpers ─────────────────────────────────────────────
+/* HELPERS */
+
 function findTodayCheckIn(mem) {
-  if (!mem || !mem.checkIns?.length) return null;
+  if (!mem?.checkIns) return null;
   const now = new Date();
-  for (let i = mem.checkIns.length - 1; i >= 0; i--) {
-    const c = mem.checkIns[i];
-    if (isSameDay(new Date(c.timestamp), now)) return c;
-  }
-  return null;
+  return mem.checkIns.find(c => isSameDay(new Date(c.timestamp), now));
 }
 
-// "today's training day" = the plan day whose label/key matches today's
-// weekday, falling back to the first non-rest day if there's no naming match.
 function pickTodaysTrainingDay(training) {
-  const week = training?.plan?.weeklyStructure;
-  if (!Array.isArray(week) || week.length === 0) return null;
-  const today = format(new Date(), 'EEEE').toLowerCase();
-  const byKey = week.find((d) => (d.dayKey || '').toLowerCase().startsWith(today));
-  if (byKey) return byKey;
-  const byLabel = week.find((d) => (d.dayLabel || '').toLowerCase().startsWith(today));
-  if (byLabel) return byLabel;
-  return week.find((d) => d.exercises?.length) || week[0];
+  return training?.plan?.weeklyStructure?.[0] || null;
 }
 
 function renderAriaVoice(checkIn) {
-  if (!checkIn) {
-    return (
-      <SerifText size={theme.fontSize.md} italic={false} weight="medium">
-        Tap to begin today{"'"}s check-in.
-      </SerifText>
-    );
-  }
-  const { ariaResponse } = checkIn;
-  if (!ariaResponse || ariaResponse.type === 'silent') {
-    return (
-      <SerifText size={theme.fontSize.md} italic={false} weight="medium">
-        You{"'"}re well within yourself today.
-      </SerifText>
-    );
-  }
   return (
-    <SerifText size={theme.fontSize.md} italic={false} weight="medium" align="center">
-      {ariaResponse.message}
+    <SerifText size={theme.fontSize.md} weight="medium" align="center">
+      {checkIn ? checkIn.ariaResponse?.message : "Tap to begin today's check-in."}
     </SerifText>
   );
 }
@@ -333,41 +289,40 @@ function formatNum(v) {
   return String(Math.round(v * 10) / 10);
 }
 
-const QUICK_SIZE = 44;
+/* STYLES */
 
 const styles = StyleSheet.create({
+
   container: {
     flex: 1,
     paddingHorizontal: theme.spacing.xl,
     paddingTop: theme.spacing.md,
-    // Bottom padding leaves room for the floating tab bar (≈ 64pt + safe area).
-    paddingBottom: 96,
+    paddingBottom: 110,
   },
-  // ── Header ─────────────────────────────────────────
+
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  headerSide: { flex: 1 },
-  headerSideRight: { alignItems: 'flex-end' },
+
   logoWrap: {
     flexDirection: 'row',
     alignItems: 'baseline',
   },
+
   brand: {
     fontFamily: theme.fonts.bodySemi,
     fontSize: theme.fontSize['2xl'],
     color: theme.colors.text.primary,
-    letterSpacing: -1,
   },
+
   brandDot: {
     fontFamily: theme.fonts.bodySemi,
     fontSize: theme.fontSize['2xl'],
     color: theme.colors.amber.primary,
-    letterSpacing: -1,
   },
-  // ── Meta row (date · weather) ──────────────────────
+
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -375,133 +330,90 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     marginTop: theme.spacing.xs,
   },
+
   metaItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
+
   metaText: {
     fontFamily: theme.fonts.bodyMedium,
     fontSize: theme.fontSize.sm,
     color: theme.colors.text.secondary,
   },
+
   metaDot: {
     width: 3,
     height: 3,
     borderRadius: theme.radii.full,
     backgroundColor: theme.colors.text.dim,
   },
-  // ── Three-box wrapper ──────────────────────────────
-  // Asymmetric rhythm: Box 1 (ring + voice) sits at the top of the available
-  // space, then a generous flex gap, then Box 2 (actions) and Box 3 (pulse)
-  // sit tight against each other near the bottom — no breathing room between
-  // the meal pill and the mic.
-  //
-  // marginTop is intentionally large (~2 cm in physical pt) so the ring
-  // visibly sits lower on the screen — the upper cluster is shifted down,
-  // while Box 2's marginTop:'auto' keeps the actions+pulse cluster anchored
-  // at the bottom (mic + tab bar never scroll off-screen).
-  boxesWrap: {
-    flex: 1,
-    marginTop: 80,
+
+  middle: {
+    flexGrow: 1,
+    gap: theme.spacing.xl,
   },
-  // BOX 1 — ring + caption + voice line, centered
+
   boxRing: {
     alignItems: 'center',
-    gap: theme.spacing.sm,
-  },
-  // The flex spacer between BOX 1 and BOX 2 absorbs all leftover vertical
-  // space — guaranteed to push BOX 2 (and BOX 3 below it) to the bottom on
-  // every device, including iOS where marginTop:'auto' was inconsistent.
-  spacer: {
-    flex: 1,
-  },
-  // BOX 2 — quick row (full-width) + meal anchor (centered).
-  boxActions: {
     gap: theme.spacing.md,
+    flexShrink: 0,
   },
-  // BOX 3 — mic + check-in label, centered. Effectively flush against
-  // BOX 2 — the mic and the nutrition strip read as a single unit.
-  boxPulse: {
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    marginTop: 2,
-  },
-  // Ring + caption render as a tight block; caption clears the ring's
-  // bottom dot (which lives 14pt outside the SVG circle).
-  ringBlock: {
-    alignItems: 'center',
-  },
-  scoreNumeral: {
+
+  score: {
     fontFamily: theme.fonts.bodySemi,
     fontSize: 50,
     lineHeight: 50,
     color: theme.colors.text.primary,
-    letterSpacing: -1.5,
     textAlign: 'center',
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-    // Most digit faces have visual weight slightly above the box center —
-    // a 2pt push down lands the score on the ring's optical center.
-    transform: [{ translateY: 2 }],
   },
-  scoreCaption: {
+
+  caption: {
     color: theme.colors.text.tertiary,
     textAlign: 'center',
-    // Clears the ring's bottom dot (≈17pt below the SVG bounds) plus a beat.
-    marginTop: 20,
   },
+
   voiceWrap: {
-    alignSelf: 'stretch',
-    paddingHorizontal: theme.spacing.lg,
     alignItems: 'center',
+    paddingHorizontal: theme.spacing.lg,
+    width: '100%',
   },
-  // ── Quick row ──────────────────────────────────────
-  // No marginTop — the parent box (boxActions) handles vertical rhythm via gap.
+
+  boxActions: {
+    gap: theme.spacing.lg,
+    flexShrink: 0,
+  },
+
   quickRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    rowGap: theme.spacing.sm,
+    columnGap: theme.spacing.sm,
   },
-  quickItem: { alignItems: 'center', gap: 6, flex: 1 },
-  quickCircle: {
-    width: QUICK_SIZE,
-    height: QUICK_SIZE,
-    borderRadius: theme.radii.full,
+
+  quickCell: {
+    width: '48%',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
     borderWidth: StyleSheet.hairlineWidth * 2,
+    borderRadius: theme.radii.full,
     borderColor: theme.colors.border.strong,
-    alignItems: 'center',
-    justifyContent: 'center',
     backgroundColor: theme.colors.background.secondary,
   },
+
   quickLabel: {
     fontFamily: theme.fonts.bodyMedium,
-    fontSize: 11,
-    color: theme.colors.text.tertiary,
-    letterSpacing: 0.2,
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.text.primary,
   },
-  // ── Meal row ───────────────────────────────────────
-  // No marginTop — boxActions controls the gap to the quick row.
+
   mealRow: {
     alignItems: 'center',
   },
-  logMealBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: 10,
-    borderRadius: theme.radii.full,
-    borderWidth: StyleSheet.hairlineWidth * 2,
-    borderColor: theme.colors.amber.dim,
-    backgroundColor: theme.colors.background.secondary,
-  },
-  logMealLabel: {
-    fontFamily: theme.fonts.bodyMedium,
-    fontSize: theme.fontSize.sm,
-    color: theme.colors.amber.primary,
-    letterSpacing: 0.2,
-  },
+
   nutStrip: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -509,6 +421,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'center',
   },
+
   nutPill: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -520,12 +433,18 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border.subtle,
     backgroundColor: theme.colors.background.secondary,
   },
+
   nutValue: {
     fontFamily: theme.fonts.bodySemi,
     fontSize: theme.fontSize.sm,
     color: theme.colors.amber.primary,
   },
-  nutLabelText: { color: theme.colors.text.dim, letterSpacing: 1 },
+
+  nutLabelText: {
+    color: theme.colors.text.dim,
+    letterSpacing: 1,
+  },
+
   addMealBtn: {
     width: 30,
     height: 30,
@@ -536,5 +455,33 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.amber.dim,
     backgroundColor: theme.colors.background.secondary,
   },
-  footerLabel: { color: theme.colors.text.dim },
+
+  logMealBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: 10,
+    borderRadius: theme.radii.full,
+    borderWidth: StyleSheet.hairlineWidth * 2,
+    borderColor: theme.colors.amber.dim,
+    backgroundColor: theme.colors.background.secondary,
+  },
+
+  logMealLabel: {
+    fontFamily: theme.fonts.bodyMedium,
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.amber.primary,
+  },
+
+  boxPulse: {
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginTop: 'auto',
+  },
+
+  footer: {
+    color: theme.colors.text.dim,
+  },
+
 });
