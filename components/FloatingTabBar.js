@@ -20,8 +20,8 @@ import Animated, {
 import theme from '../theme';
 import * as haptics from '../utils/haptics';
 
-const ITEM_SIZE = 52;
-const BAR_PADDING = 6;
+const ITEM_SIZE = 44;
+const BAR_PADDING = 4;
 const SPRING = { damping: 18, stiffness: 220, mass: 0.6 };
 
 export default function FloatingTabBar({ state, descriptors, navigation }) {

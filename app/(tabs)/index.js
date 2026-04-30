@@ -169,7 +169,7 @@ export default function Home() {
 
           {/* RING + VOICE */}
           <View style={styles.boxRing}>
-            <DailyRing size={170}>
+            <DailyRing size={130}>
               <Text style={styles.score}>
                 {todayCheckIn ? score : '—'}
               </Text>
@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: theme.spacing.xl,
     paddingTop: theme.spacing.md,
-    paddingBottom: 110,
+    paddingBottom: 90,
   },
 
   headerRow: {
@@ -359,12 +359,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.md,
     flexShrink: 0,
+    marginTop: theme.spacing.xl,
   },
 
   score: {
     fontFamily: theme.fonts.bodySemi,
-    fontSize: 50,
-    lineHeight: 50,
+    fontSize: 38,
+    lineHeight: 38,
     color: theme.colors.text.primary,
     textAlign: 'center',
   },
@@ -475,8 +476,10 @@ const styles = StyleSheet.create({
   },
 
   boxPulse: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
+    justifyContent: 'space-between',
+    paddingHorizontal: theme.spacing.md,
     marginTop: 'auto',
   },
 
